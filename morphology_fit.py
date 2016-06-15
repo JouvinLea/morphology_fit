@@ -42,11 +42,14 @@ fit()
 pt.ion()
 energy_bins = EnergyBounds.equal_log_spacing(0.5, 100, 5, 'TeV')
 
-# E1=energy_bins[1].value
+#E1=energy_bins[1].value
 # E2=energy_bins[2].value
-for i_E, E in enumerate(energy_bins[0:-3]):
-    E1 = energy_bins[i_E].value
-    E2 = energy_bins[i_E+1].value
+#for i_E, E in enumerate(energy_bins[0:-3]):
+for i_E, E in enumerate(energy_bins[0:-5]):
+    #E1 = energy_bins[i_E].value
+    #E2 = energy_bins[i_E+1].value
+    E1 = energy_bins[0].value
+    E2 = energy_bins[3].value
     print "Energy band= E1=" + str(E1) + "et E2=" + str(E2)
     # on = SkyMapCollection.read("fov_bg_maps"+str(E1)+"_"+str(E2)+"_TeV.fits")["excess"]
     on = SkyMapCollection.read("fov_bg_maps" + str(E1) + "_" + str(E2) + "_TeV.fits")["counts"]
@@ -54,10 +57,7 @@ for i_E, E in enumerate(energy_bins[0:-3]):
     exp = SkyMapCollection.read("fov_bg_maps" + str(E1) + "_" + str(E2) + "_TeV.fits")["exposure"]
     # source_J1745_303 = SkyCoord(358.76,-0.51, unit='deg',frame="galactic")
     # On descend un peu en lattitude la region d'exclusion
-    source_J1745_303 = SkyCoord(358.76, -0.6, unit='deg', frame="galactic")
-    source_J1745_303_xpix, source_J1745_303_ypix = skycoord_to_pixel(source_J1745_303, on.wcs)
-    pix_deg = on.to_image_hdu().header["CDELT2"]
-    radius = 0.4 / pix_deg
+
 
     on.write("on_maps" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
     # bkgmap.data=bkgmap.data/bkgmap.data.sum()
@@ -94,14 +94,19 @@ for i_E, E in enumerate(energy_bins[0:-3]):
     large_gaus = Gauss2D("Gauss_to_CS")
     large_gaus.xpos, large_gaus.ypos = skycoord_to_pixel(source_center_SgrA, on.wcs)
     large_gaus.fwhm = 100
-    gauss_ls = Gauss2D("Gauss_LS")
-    gauss_ls.xpos, gauss_ls.ypos = skycoord_to_pixel(source_center_SgrA, on.wcs)
-    gauss_ls.fwhm = 100
+    central_gauss = Gauss2D("central_gauss")
+    central_gauss.xpos, central_gauss.ypos = skycoord_to_pixel(source_center_SgrA, on.wcs)
+    central_gauss.fwhm = 100
     # modele gauss pour G0p9 centre sur G0p9
     mygaus_G0p9 = normgauss2dint("G0p9")
     mygaus_G0p9.xpos, mygaus_G0p9.ypos = skycoord_to_pixel(source_center_G0p9, on.wcs)
     mygaus_G0p9.xpos.val += 0.5
     mygaus_G0p9.ypos.val += 0.5
+
+    #Arc_source
+    arc_source=SkyCoord(0.130, -0.139, unit='deg', frame="galactic")
+    mygaus_arcsource = Gauss2D("Arc Source")
+    mygaus_arcsource.xpos, mygaus_arcsource.ypos = skycoord_to_pixel(arc_source, on.wcs)
 
     # Modele pour le bkg base sur la carte de fond
     load_table_model("bkg", "off_maps" + str(E1) + "_" + str(E2) + "_TeV.fits")
@@ -117,50 +122,82 @@ for i_E, E in enumerate(energy_bins[0:-3]):
     load_table_model("CS", "cs_map_reproj.fits")
 
     #set_full_model(bkg + psf_SgrA(mygaus_SgrA)+psf_G0p9(mygaus_G0p9))
+    #set_full_model(bkg + psf_SgrA(exposure*mygaus_SgrA)+psf_G0p9(exposure*mygaus_G0p9))
+    #set_full_model(bkg + psf_SgrA(exposure*(mygaus_SgrA+large_gaus * CS))+psf_G0p9(exposure*mygaus_G0p9))
     set_full_model(bkg + psf_SgrA(mygaus_SgrA + large_gaus * CS) + psf_G0p9(mygaus_G0p9))
-    #set_full_model(bkg + psf_SgrA(mygaus_SgrA + large_gaus * CS + gauss_ls) + psf_G0p9(mygaus_G0p9))
+    #set_full_model(bkg + psf_SgrA(mygaus_SgrA + large_gaus * CS + central_gauss) + psf_G0p9(mygaus_G0p9))
+    #set_full_model(bkg + psf_SgrA(mygaus_SgrA + large_gaus * CS + mygaus_arcsource) + psf_G0p9(mygaus_G0p9))
     mygaus_SgrA.fwhm = 1
     freeze(mygaus_SgrA.fwhm)
     mygaus_G0p9.fwhm = 1
     freeze(mygaus_G0p9.fwhm)
+    mygaus_arcsource.fwhm =1
+    freeze(mygaus_arcsource.fwhm)
+
 
     freeze(mygaus_G0p9.xpos)
     freeze(mygaus_G0p9.ypos)
     freeze(mygaus_SgrA.xpos)
     freeze(mygaus_SgrA.ypos)
+    freeze(mygaus_arcsource.xpos)
+    freeze(mygaus_arcsource.ypos)
+    #thaw(mygaus_arcsource.ellip)
 
     #freeze(bkg.ampl)
-    # freeze(exposure.ampl)
-    name_region = "circle(" + str(source_J1745_303_xpix) + "," + str(source_J1745_303_ypix) + "," + str(radius) + ")"
+    freeze(exposure.ampl)
+
+    source_J1745_303 = SkyCoord(358.76, -0.6, unit='deg', frame="galactic")
+    source_J1745_303_xpix, source_J1745_303_ypix = skycoord_to_pixel(source_J1745_303, on.wcs)
+    pix_deg = on.to_image_hdu().header["CDELT2"]
+    #radius = 0.4 / pix_deg
+    width=100
+    height=80
+    name_region = "box(" + str(source_J1745_303_xpix+20) + "," + str(source_J1745_303_ypix-20) + "," + str(width) + "," + str(height) +")"
+
+    lat=1.6/ pix_deg#Pour aller a plus et -0.8 as did Anne
+    lon=4 / pix_deg#Pour aller a plus ou moins 2deg as did Anne
+    x_pix_SgrA=skycoord_to_pixel(source_center_SgrA, on.wcs)[0]
+    y_pix_SgrA=skycoord_to_pixel(source_center_SgrA, on.wcs)[1]
+    name_interest = "box(" + str(x_pix_SgrA) + "," + str(y_pix_SgrA) + "," + str(lon) + "," + str(lat) +")"
+    notice2d(name_interest)
     ignore2d(name_region)
     set_stat("cstat")
     set_method("neldermead")
+    #large_gaus.fwhm = 95
+    #freeze(large_gaus.fwhm)
     large_gaus.ampl = 1
-    #large_gaus.fwhm = 100
-    #reeze(large_gaus.fwhm)
     freeze(large_gaus.ampl)
     freeze(large_gaus.xpos)
     freeze(large_gaus.ypos)
-    freeze(gauss_ls.xpos)
-    freeze(gauss_ls.ypos)
-    # gauss_ls.theta=0
-    # gauss_ls.ellip=0.6
-    # freeze(gauss_ls.theta)
-    # thaw(gauss_ls.ellip)
-    # set_par(gauss_ls.fwhm, val=90, min=10, max=120, frozen=None)
+    #central_gauss.fwhm =10
+    #freeze(central_gauss.fwhm)
+    freeze(central_gauss.xpos)
+    freeze(central_gauss.ypos)
+
 
 
     fit()
+    import IPython; IPython.embed()
     #save_resid("residual_avec_CS_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
-    save_resid("residual_avec_CS_bkg_ampl_free_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
+    #save_resid("residual_avec_CS_bkg_ampl_free_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
     #save_resid("residual_sans_CS_bkg_ampl_free_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
     #save_resid("residual_sans_CS_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
+    #save_resid("residual_sans_CS_bkg_ampl_free_exposure_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
+    #save_resid("residual_avec_CS_bkg_ampl_free_plus_central_gauss_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
+    #save_resid("residual_avec_CS_bkg_ampl_free_plus_central_gauss_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
+    #save_resid("residual_avec_CS_bkg_ampl_free_plus_central_gauss_CSgauss_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
+    #save_resid("residual_avec_CS_bkg_ampl_free_plus_arc_source_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
+    #save_resid("residual_avec_CS_bkg_ampl_free_plus_arc_source_CSgauss_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
+    #save_resid("residual_avec_CS_bkg_ampl_free_plus_arc_source_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
+    #save_resid("residual_avec_CS_bkg_ampl_free_exposure_" + str(E1) + "_" + str(E2) + "_TeV.fits", clobber=True)
     # save_model("model_"+str(E1)+"_"+str(E2)+"_TeV.fits", clobber=True)
     # save_data("data_"+str(E1)+"_"+str(E2)+"_TeV.fits", clobber=True)
     shape = np.shape(on.data)
     mask = get_data().mask.reshape(shape)
-    map_data = np.flipud(get_data().y.reshape(shape) * mask)
-    model = np.flipud(get_model()(get_data().x0, get_data().x1).reshape(shape) * mask)
+    #map_data = np.flipud(get_data().y.reshape(shape) * mask)
+    #model = np.flipud(get_model()(get_data().x0, get_data().x1).reshape(shape) * mask)
+    map_data = get_data().y.reshape(shape) * mask
+    model = get_model()(get_data().x0, get_data().x1).reshape(shape) * mask
     resid = map_data - model
     coord = on.coordinates()
     # data_on=SkyMap.read("data_"+str(E1)+"_"+str(E2)+"_TeV.fits", clobber=True)
@@ -215,10 +252,17 @@ for i_E, E in enumerate(energy_bins[0:-3]):
     pt.xlim(-1.5, 1.5)
     pt.gca().invert_xaxis()
     #pt.savefig("plot/profile_longitude_avec_CS_" + str("%.2f"%E1) + "_" + str("%.2f"%E2) + "_TeV.jpg")
-    pt.savefig("plot/profile_longitude_avec_CS_bkg_ampl_free_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_longitude_avec_CS_bkg_ampl_free_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
     #pt.savefig("plot/profile_longitude_sans_CS_bkg_ampl_free_"+str(E1)+"_"+str(E2)+"_TeV.jpg")
     #pt.savefig("plot/profile_longitude_sans_CS_"+str(E1)+"_"+str(E2)+"_TeV.jpg")
-
+    #pt.savefig("plot/profile_longitude_sans_CS_bkg_ampl_free_exposure_"+str(E1)+"_"+str(E2)+"_TeV.jpg")
+    #pt.savefig("plot/profile_longitude_avec_CS_bkg_ampl_free_plus_central_gauss_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_longitude_avec_CS_bkg_ampl_free_plus_central_gauss_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_longitude_avec_CS_bkg_ampl_free_plus_central_gauss_CSgauss_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_longitude_avec_CS_bkg_ampl_free_plus_arc_source_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_longitude_avec_CS_bkg_ampl_free_plus_arc_source_CSgauss_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_longitude_avec_CS_bkg_ampl_free_plus_arc_source_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_longitude_avec_CS_bkg_ampl_free_exposure_"+str(E1)+"_"+str(E2)+"_TeV.jpg")
     # Ici coord l deja modif cad que les valeur sup a 360 sont mis negatives avec - 360
     l_center = on.center().l
     if l_center > 180 * u.deg:
@@ -259,10 +303,17 @@ for i_E, E in enumerate(energy_bins[0:-3]):
     pt.xlabel("latitude (degrees)")
     pt.xlim(-1, 1)
     #pt.savefig("plot/profile_lattitude_avec_CS_" + str("%.2f"%E1) + "_" + str("%.2f"%E2) + "_TeV.jpg")
-    pt.savefig("plot/profile_lattitude_avec_CS_bkg_ampl_free_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_lattitude_avec_CS_bkg_ampl_free_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
     #pt.savefig("plot/profile_lattitude_sans_CS_bkg_ampl_free_"+str(E1)+"_"+str(E2)+"_TeV.jpg")
     #pt.savefig("plot/profile_lattitude_sans_CS_"+str(E1)+"_"+str(E2)+"_TeV.jpg")
-
+    #pt.savefig("plot/profile_lattitude_sans_CS_bkg_ampl_free_exposure_"+str(E1)+"_"+str(E2)+"_TeV.jpg")
+    #pt.savefig("plot/profile_lattitude_avec_CS_bkg_ampl_free_plus_arc_source_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_lattitude_avec_CS_bkg_ampl_free_plus_arc_source_CSgauss_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_lattitude_avec_CS_bkg_ampl_free_plus_arc_source_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_lattitude_avec_CS_bkg_ampl_free_plus_central_gauss_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_lattitude_avec_CS_bkg_ampl_free_plus_central_gauss_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_lattitude_avec_CS_bkg_ampl_free_plus_central_gauss_CSgauss_fwhmfix_" + str(E1) + "_" + str(E2) + "_TeV.jpg")
+    #pt.savefig("plot/profile_lattitude_avec_CS_bkg_ampl_free_exposure_"+str(E1)+"_"+str(E2)+"_TeV.jpg")
     # save_resid("residual_avec_CS_method_cstat_neldermead_fwmh_Sgra_etG0p9_fix_"+str(E1)+"_"+str(E2)+"_TeV.fits", clobber=True)
     # save_resid("residual_avec_CS_method_cstat_neldermead_"+str(E1)+"_"+str(E2)+"_TeV.fits", clobber=True)
     # save_resid("residual_sans_CS_method_cstat_neldermead_"+str(E1)+"_"+str(E2)+"_TeV.fits", clobber=True)
